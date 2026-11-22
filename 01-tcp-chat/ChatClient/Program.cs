@@ -8,32 +8,42 @@ namespace ChatClient
     {
         static async Task Main(string[] args)
         {
-            string? line;
-            var listener = new TcpListener(IPAddress.Loopback, 5000);
-            listener.Start();
-            Console.WriteLine("Awaiting Message...");
 
-            using TcpClient client = await listener.AcceptTcpClientAsync();
-            Console.WriteLine("Client Connected.");
-
-
+            using var client = new TcpClient();
+            await client.ConnectAsync("127.0.0.1", 5000);
+            Console.WriteLine("Connected to Server...");
             using NetworkStream stream = client.GetStream();
             using var reader = new StreamReader(stream);
             using var writer = new StreamWriter(stream) { AutoFlush = true };
+            Task receiveTask = ReceiveLoopAsync(reader);
             try
             {
-                while ((line = await reader.ReadLineAsync()) != null)
+                string? line;
+                while(!string.IsNullOrEmpty(line = Console.ReadLine()))
                 {
-                    Console.WriteLine($"Got: {line}");
-                    await writer.WriteLineAsync($"Echo: {line}");
+                    await writer.WriteLineAsync(line);
+                }
+                client.Client.Shutdown(SocketShutdown.Send);
+                await receiveTask;
+            }
+            catch (IOException)
+            {
+                Console.WriteLine("Connection to server ended abruptly...");
+            }
+        }
+        static async Task ReceiveLoopAsync(StreamReader receive)
+        {
+            try
+            {
+                string? line;
+                while ((line = await receive.ReadLineAsync()) != null)
+                {
+                    Console.WriteLine($"Got {line}");
                 }
             }
-            catch (Exception e)
-            {
-                Console.WriteLine("Client Disconnected.");
-
+            catch (Exception ex) {
+                Console.WriteLine($"Error..{ex}");
             }
-
 
         }
     }
