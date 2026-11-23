@@ -16,6 +16,8 @@ namespace ChatClient
             using var reader = new StreamReader(stream);
             using var writer = new StreamWriter(stream) { AutoFlush = true };
             Task receiveTask = ReceiveLoopAsync(reader);
+            string username = Console.ReadLine() ?? "Default";
+            await writer.WriteLineAsync(username);
             try
             {
                 string? line;

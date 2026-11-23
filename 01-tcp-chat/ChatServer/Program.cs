@@ -5,51 +5,55 @@ namespace ChatServer
 {
     internal class Program
     {
+        static ConcurrentDictionary<int, (StreamWriter swriter, string name)> writers = new();
         static async Task Main()
         {
+
             var listener = new TcpListener(IPAddress.Loopback, 5000);
             listener.Start();
             Console.WriteLine("Server Started.");
-            var writers = new ConcurrentDictionary<int, StreamWriter>();
+            
             int nextID = 0;
             while (true) {
                 TcpClient tcp = await listener.AcceptTcpClientAsync();
-                _ = HandleClientAsync(tcp, writers, nextID);
+                _ = HandleClientAsync(tcp, nextID);
                 Interlocked.Increment(ref nextID);
             }
         }
-        static async Task HandleClientAsync(TcpClient tcp, ConcurrentDictionary<int, StreamWriter> writers, int ID)
+        static async Task HandleClientAsync(TcpClient tcp, int ID)
         {
             using (tcp)
             {
-                Console.WriteLine("Client Connected.");
+                
                 using NetworkStream stream = tcp.GetStream();
                 using var reader = new StreamReader(stream);
                 using var writer = new StreamWriter(stream) { AutoFlush = true };
-                writers.TryAdd(ID, writer);
+                string username = await reader.ReadLineAsync() ?? "Default";
+                Console.WriteLine($"{username} Connected.");
+                writers.TryAdd(ID,(writer,username));
                 try
                 {
                     string? line;
                     while ((line = await reader.ReadLineAsync()) != null)
                     {
-                        Console.WriteLine($"From: Client {ID}: {line}");
+                        Console.WriteLine($"From: {username}: {line}");
                         foreach (var kvp in writers)
                         {
                             try
                             {
-                                await kvp.Value.WriteLineAsync($"{ID}: {line}");
+                                await kvp.Value.swriter.WriteLineAsync($"{username}: {line}");
                             }
                             catch (IOException)
                             {
-                                Console.WriteLine($"Client {kvp.Key} Disconnected.");
+                                Console.WriteLine($"{username} Disconnected.");
                             }
                         }
                     }
-                    Console.WriteLine($"Client {ID} Disconnected.");
+                    Console.WriteLine($"{username} Disconnected.");
                 }
                 catch (IOException)
                 {
-                    Console.WriteLine($"Client {ID} Disconnected abruptly.");
+                    Console.WriteLine($"{username} Disconnected abruptly.");
                 }
                 finally { writers.TryRemove(ID, out _); }
             }
