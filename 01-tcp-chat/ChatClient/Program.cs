@@ -15,7 +15,7 @@ namespace ChatClient
             using NetworkStream stream = client.GetStream();
             using var reader = new StreamReader(stream);
             using var writer = new StreamWriter(stream) { AutoFlush = true };
-            Task receiveTask = ReceiveLoopAsync(reader);
+            Task receiveTask = ReceiveLoopAsync(client, reader);
             string username = Console.ReadLine() ?? "Default";
             await writer.WriteLineAsync(username);
             try
@@ -33,18 +33,26 @@ namespace ChatClient
                 Console.WriteLine("Connection to server ended abruptly...");
             }
         }
-        static async Task ReceiveLoopAsync(StreamReader receive)
+        static async Task ReceiveLoopAsync(TcpClient client, StreamReader receive)
         {
             try
             {
                 string? line;
                 while ((line = await receive.ReadLineAsync()) != null)
                 {
-                    Console.WriteLine($"Got {line}");
+                    if(line == "/shutdown")
+                    {
+                        Console.WriteLine("Server is shutting down. Client Disconnected.");
+                        client.Client.Shutdown(SocketShutdown.Both);
+                    }
+                    else
+                    {
+                        Console.WriteLine($"{line}");
+                    }
                 }
             }
-            catch (Exception ex) {
-                Console.WriteLine($"Error..{ex}");
+            catch (IOException) {
+                Console.WriteLine("Connection to server ended. You can close this window.");
             }
 
         }
