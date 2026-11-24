@@ -43,34 +43,40 @@ namespace ChatServer
                 using var reader = new StreamReader(stream);
                 using var writer = new StreamWriter(stream) { AutoFlush = true };
                 string username = await reader.ReadLineAsync() ?? "Default";
-                _ = BroadcastAsync($"{username} Connected.");
                 writers.TryAdd(ID,(writer,username));
+                await BroadcastAsync($"{username} Connected.");
                 try
                 {
                     string? line;
                     while ((line = await reader.ReadLineAsync()) != null)
                     {
                         //Console.WriteLine($"From: {username}: {line}");
-                        if (line[0] == '/')
+                        if (line.StartsWith('/'))
                         {
                             var cmd = line.Split(' ', 3);
                             string? message;
                             switch (cmd[0]) {
                                 case "/list":
                                     message = "Connected Users: \n";
-                                    foreach(var u in writers)
+                                    message += string.Join("\n", writers.Select(u => $"{u.Value.name}#{u.Key}"));
+                                    foreach (var u in writers)
                                     {
                                         message += $"{u.Value.name}#{u.Key} \n";
                                     }
-                                    _ = writer.WriteLineAsync(message);
+                                    await writer.WriteLineAsync(message);
                                     break;
                                 case "/u":
-                                    int.TryParse(cmd[1].Split('#')[1], out int res);
-                                    _ = BroadcastAsync(cmd[2], res, username);
+                                    if (cmd.Length < 3 || !TryParseTarget(cmd[1], out int targetId))
+                                    {
+                                        await writer.WriteLineAsync("Usage: /u Name#ID message");
+                                        break;
+                                    }
+                                    if (!await BroadcastPrivateAsync(targetId, username, cmd[2]))
+                                        await writer.WriteLineAsync("User not found.");
                                     break;
                                 case "/help":
                                     message = "Available Commands: \n /list\n/u username#id message\n/quit";
-                                    _ = writer.WriteLineAsync(message);
+                                    await writer.WriteLineAsync(message);
                                     break;
                                 case "/quit":
                                     tcp.Client.Shutdown(SocketShutdown.Send);
@@ -79,10 +85,10 @@ namespace ChatServer
                         }
                         else
                         {
-                            _ = BroadcastAsync($"{username}:{line}");
+                            await BroadcastAsync($"{username}:{line}");
                         }
                     }
-                    _ = BroadcastAsync($"{username} Disconnected.");
+                    await BroadcastAsync($"{username} Disconnected.");
                 }
                 catch (IOException)
                 {
@@ -93,27 +99,31 @@ namespace ChatServer
            
         }
 
-        static async Task BroadcastAsync(string line, int id = 0, string user ="")
+        static async Task<bool> BroadcastPrivateAsync(int targetId, string from, string text)
         {
-            if(id == 0)
+            if (!writers.TryGetValue(targetId, out var target)) return false;
+            await target.swriter.WriteLineAsync($"[Private Message]: {from} -> {text}");
+            return true;
+        }
+        static async Task BroadcastAsync(string line)
+        {
+            foreach (var kvp in writers)
             {
-                foreach (var kvp in writers)
+                try
                 {
-                    try
-                    {
-                        await kvp.Value.swriter.WriteLineAsync($"{line}");
-                    }
-                    catch (IOException)
-                    {
-                        Console.WriteLine($"{kvp.Value.name} Disconnected.");
-                    }
+                    await kvp.Value.swriter.WriteLineAsync($"{line}");
+                }
+                catch (IOException)
+                {
+                    Console.WriteLine($"{kvp.Value.name} Disconnected.");
                 }
             }
-            else
-            {
-                _ = writers[id].swriter.WriteLineAsync($"[Private Message]: {user} -> {line}");
-            }
-
+        }
+        static bool TryParseTarget(string text, out int id)
+        {
+            id = 0;
+            int hash = text.LastIndexOf('#');
+            return hash >= 0 && int.TryParse(text[(hash + 1)..], out id);
         }
     }
 }

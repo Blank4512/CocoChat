@@ -24,6 +24,7 @@ namespace ChatClient
                 while(!string.IsNullOrEmpty(line = Console.ReadLine()))
                 {
                     await writer.WriteLineAsync(line);
+                    if (line == "/quit") break;
                 }
                 client.Client.Shutdown(SocketShutdown.Send);
                 await receiveTask;
